@@ -4,56 +4,73 @@ const cors = require('cors');
 
 const app = express();
 
-// Enable CORS for cross-origin grading requests
+// Requirement: CORS header: Access-Control-Allow-Origin: *
 app.use(cors());
 
 app.get('/api/classify', async (req, res) => {
   const { name } = req.query;
 
-  // 1. Query Parameter Handling (10/10 pts)
-  if (!name || name.trim() === "") {
+  // 1. Input Validation: Missing or empty name returns 400 Bad Request
+  if (name === undefined || name.trim() === "") {
     return res.status(400).json({ 
-      error: "Name parameter is required" 
+      status: "error", 
+      message: "Name parameter is required" 
+    });
+  }
+
+  // 2. Input Validation: Non-string name returns 422 Unprocessable Entity
+  // (Note: In URLs, numbers come in as strings, but we check if it's strictly numeric)
+  if (!isNaN(name) && !/^[a-zA-Z]+$/.test(name)) {
+    return res.status(422).json({ 
+      status: "error", 
+      message: "Non-string name provided" 
     });
   }
 
   try {
-    // 2. External API Integration (20/20 pts)
-    const response = await axios.get(`https://api.genderize.io?name=${encodeURIComponent(name)}`, {
-        timeout: 5000 // Prevents the execution time penalty
+    // 3. External API Integration
+    const response = await axios.get(`https://api.genderize.io?name=${encodeURIComponent(name)}`, { 
+        timeout: 4500 // Staying under 500ms is target, but we allow for external latency
     });
     
     const { gender, probability, count } = response.data;
 
-    // 3. Confidence Logic & Edge Case Handling (25/25 pts)
-    // We treat 'null' genders as 'unknown' and is_confident: false
-    // This ensures "nonsense names" don't trigger a 500 or 400 error.
-    const is_confident = !!gender && probability >= 0.7 && count >= 10;
+    // 4. Genderize Edge Cases: gender: null or count: 0
+    if (gender === null || count === 0) {
+      return res.status(404).json({ 
+        status: "error", 
+        message: "No prediction available for the provided name" 
+      });
+    }
 
-    // 4. Response Format & Data Extraction (25/25 pts)
-    // Flattened structure as expected by HNG automated testers
+    // 5. Confidence Logic: probability >= 0.7 AND sample_size >= 100
+    // Requirement: Both conditions must be met for true
+    const is_confident = probability >= 0.7 && count >= 100;
+
+    // 6. Expected Response Format (Success)
     res.status(200).json({
-      name: name,
-      gender: gender || "unknown",
-      probability: probability || 0,
-      count: count || 0,
-      is_confident: is_confident,
-      processed_at: new Date().toISOString()
+      status: "success",
+      data: {
+        name: name,
+        gender: gender,
+        probability: probability,
+        sample_size: count, // Renamed from count
+        is_confident: is_confident,
+        processed_at: new Date().toISOString() // UTC ISO 8601
+      }
     });
 
   } catch (error) {
-    // 5. Error Handling (10/10 pts)
-    // Prevents "ResponseError: too many 500 error responses"
-    console.error("API Error:", error.message);
-    res.status(500).json({ 
-      error: "Internal Server Error",
-      message: "External service reached but could not process the request"
+    // 7. Error Handling structure
+    const statusCode = error.response ? error.response.status : 500;
+    res.status(statusCode).json({ 
+      status: "error", 
+      message: error.message || "Internal Server Error" 
     });
   }
 });
 
-// Use the PORT provided by the environment (Render) or default to 3000
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+  console.log(`Server is live on port ${PORT}`);
 });
