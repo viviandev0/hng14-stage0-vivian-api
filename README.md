@@ -3,7 +3,7 @@
 A robust Node.js API that integrates with the Genderize.io external service to classify names by gender. This project demonstrates backend integration, data processing logic, and strict error handling.
 
 ## Public API Base URL
-https://hng14-stage0-vivian-api.onrender.com
+https://hng14-stage0-vivian-api.vercel.app/
 
 ## Features
 - **Data Transformation**: Converts raw Genderize API data into a structured custom format.
